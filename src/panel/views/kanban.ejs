@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp AI - Kanban</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #e5ddd5; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar (Lista de Chats) */
+        .sidebar { width: 350px; background: #ffffff; display: flex; flex-direction: column; border-right: 1px solid #d1d7db; z-index: 10; }
+        .sidebar-header { background: #f0f2f5; padding: 15px 20px; font-weight: bold; border-bottom: 1px solid #d1d7db; display: flex; justify-content: space-between; align-items: center; }
+        .back-btn { text-decoration: none; color: #128C7E; font-size: 14px; font-weight: normal; }
+        .chat-list { flex: 1; overflow-y: auto; background: #ffffff; }
+        .section-title { padding: 10px 20px; background: #f7f7f7; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #eee; position: sticky; top: 0; }
+        
+        .chat-item { display: flex; padding: 12px 20px; border-bottom: 1px solid #f2f2f2; cursor: pointer; transition: background 0.2s; align-items: center; }
+        .chat-item:hover { background: #f5f6f6; }
+        .chat-item.active { background: #ebebeb; }
+        .avatar { width: 45px; height: 45px; border-radius: 50%; background: #dfe5e7; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-right: 15px; color: #fff; font-weight: bold; }
+        .avatar-group { background: #128C7E; }
+        .avatar-user { background: #075E54; }
+        
+        .chat-info { flex: 1; min-width: 0; }
+        .chat-name { font-weight: bold; color: #111b21; margin: 0 0 4px 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chat-preview { margin: 0; font-size: 14px; color: #667781; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chat-meta { text-align: right; margin-left: 10px; }
+        .chat-time { font-size: 12px; color: #667781; }
+
+        /* Main Area (Conversa) */
+        .main { flex: 1; display: flex; flex-direction: column; background: #efeae2; position: relative; }
+        .main::before { content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); opacity: 0.06; z-index: 1; pointer-events: none; }
+        
+        .chat-header { background: #f0f2f5; padding: 15px 25px; border-bottom: 1px solid #d1d7db; display: flex; align-items: center; z-index: 2; height: 60px; box-sizing: border-box;}
+        .chat-header h2 { margin: 0; font-size: 16px; color: #111b21; }
+        
+        .messages-container { flex: 1; padding: 20px 5%; overflow-y: auto; z-index: 2; display: flex; flex-direction: column; }
+        
+        .message { max-width: 65%; padding: 8px 12px; margin-bottom: 12px; border-radius: 7px; position: relative; font-size: 14px; line-height: 1.4; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); }
+        .msg-assistant { align-self: flex-start; background: #ffffff; border-top-left-radius: 0; }
+        .msg-user { align-self: flex-end; background: #d9fdd3; border-top-right-radius: 0; }
+        
+        .msg-time { display: block; font-size: 11px; color: #667781; text-align: right; margin-top: 4px; }
+        
+        .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; color: #667781; font-size: 16px; z-index: 2; background: #f0f2f5; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span>Atendimentos</span>
+            <a href="/" class="back-btn">← Voltar</a>
+        </div>
+        <div class="chat-list" id="chatList">
+            <!-- Renderizado via JS -->
+            <div style="padding: 20px; text-align: center; color: #888;">Carregando chats...</div>
+        </div>
+    </div>
+
+    <div class="main" id="mainArea">
+        <div class="empty-state">
+            Selecione uma conversa para visualizar o histórico.
+        </div>
+    </div>
+
+    <script>
+        let currentChatId = null;
+        let lastChatsData = "[]";
+        let lastMessagesData = "[]";
+
+        // Formata data ISO para hora curta (HH:MM)
+        function formatTime(isoStr) {
+            const date = new Date(isoStr);
+            return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Formata data ISO para data completa
+        function formatFullDate(isoStr) {
+            const date = new Date(isoStr);
+            return date.toLocaleString('pt-BR');
+        }
+
+        // Obtém a primeira letra para o avatar
+        function getInitials(name) {
+            return name ? name.charAt(0).toUpperCase() : '?';
+        }
+
+        // Renderiza a lista lateral de chats
+        async function loadChats() {
+            try {
+                const res = await fetch('/api/chats');
+                const chats = await res.json();
+                
+                // Evita re-renderizar o DOM se não houve mudança
+                const chatsStr = JSON.stringify(chats);
+                if (chatsStr === lastChatsData) return;
+                lastChatsData = chatsStr;
+
+                const now = new Date().getTime();
+                
+                let htmlAtivos = '';
+                let htmlInativos = '';
+
+                chats.forEach(chat => {
+                    const chatTime = new Date(chat.updatedAt).getTime();
+                    const diffMinutes = (now - chatTime) / (1000 * 60);
+                    const isActive = diffMinutes <= 10;
+                    
+                    const avatarClass = chat.isGroup ? 'avatar-group' : 'avatar-user';
+                    const activeClass = currentChatId === chat.id ? 'active' : '';
+
+                    const chatHtml = `
+                        <div class="chat-item ${activeClass}" onclick="openChat('${chat.id}', '${chat.name.replace(/'/g, "\\'")}')">
+                            <div class="avatar ${avatarClass}">${getInitials(chat.name)}</div>
+                            <div class="chat-info">
+                                <h3 class="chat-name">${chat.name}</h3>
+                                <p class="chat-preview">${chat.lastMessage.role === 'assistant' ? '🤖 ' : ''}${chat.lastMessage.text}</p>
+                            </div>
+                            <div class="chat-meta">
+                                <span class="chat-time">${formatTime(chat.updatedAt)}</span>
+                            </div>
+                        </div>
+                    `;
+
+                    if (isActive) {
+                        htmlAtivos += chatHtml;
+                    } else {
+                        htmlInativos += chatHtml;
+                    }
+                });
+
+                let finalHtml = '';
+                if (htmlAtivos) {
+                    finalHtml += `<div class="section-title">🔴 Ativos (Últimos 10 min)</div>${htmlAtivos}`;
+                }
+                if (htmlInativos) {
+                    finalHtml += `<div class="section-title">⚪ Inativos</div>${htmlInativos}`;
+                }
+
+                if (!finalHtml) finalHtml = '<div style="padding: 20px; text-align: center; color: #888;">Nenhuma conversa registrada.</div>';
+
+                document.getElementById('chatList').innerHTML = finalHtml;
+
+            } catch (err) {
+                console.error("Erro ao carregar chats:", err);
+            }
+        }
+
+        // Abre um chat específico
+        async function openChat(id, name) {
+            currentChatId = id;
+            lastChatsData = ""; // Força atualização visual da classe 'active'
+            loadChats(); // Recarrega a sidebar imediatamente para marcar como ativo
+
+            document.getElementById('mainArea').innerHTML = `
+                <div class="chat-header">
+                    <h2>${name} <span style="font-size: 12px; font-weight: normal; color: #666; margin-left: 10px;">${id}</span></h2>
+                </div>
+                <div class="messages-container" id="messagesContainer">
+                    <div style="text-align: center; color: #888; margin-top: 20px;">Carregando mensagens...</div>
+                </div>
+            `;
+            
+            lastMessagesData = "[]"; // Reseta cache
+            loadMessages();
+        }
+
+        // Carrega as mensagens do chat aberto
+        async function loadMessages() {
+            if (!currentChatId) return;
+
+            try {
+                const res = await fetch(`/api/chats/${currentChatId}/messages`);
+                const messages = await res.json();
+                
+                const msgsStr = JSON.stringify(messages);
+                if (msgsStr === lastMessagesData) return;
+                lastMessagesData = msgsStr;
+
+                let msgsHtml = '';
+                messages.forEach(msg => {
+                    const msgClass = msg.role === 'user' ? 'msg-user' : 'msg-assistant';
+                    msgsHtml += `
+                        <div class="message ${msgClass}">
+                            <div>${msg.text}</div>
+                            <span class="msg-time">${formatFullDate(msg.createdAt)}</span>
+                        </div>
+                    `;
+                });
+
+                if (messages.length === 0) {
+                    msgsHtml = '<div style="text-align: center; color: #888; margin-top: 20px;">Nenhuma mensagem encontrada.</div>';
+                }
+
+                const container = document.getElementById('messagesContainer');
+                if (container) {
+                    const isScrolledToBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 50;
+                    container.innerHTML = msgsHtml;
+                    
+                    // Só rola pra baixo se o usuário já estivesse lá embaixo ou se for a primeira carga
+                    if (isScrolledToBottom || msgsHtml.includes('Nenhuma mensagem')) {
+                        container.scrollTop = container.scrollHeight;
+                    }
+                }
+            } catch (err) {
+                console.error("Erro ao carregar histórico:", err);
+            }
+        }
+
+        // Inicialização
+        loadChats();
+
+        // Polling (Auto-refresh)
+        setInterval(() => {
+            loadChats();
+            if (currentChatId) {
+                loadMessages();
+            }
+        }, 5000); // Atualiza a cada 5 segundos
+
+    </script>
+</body>
+</html>

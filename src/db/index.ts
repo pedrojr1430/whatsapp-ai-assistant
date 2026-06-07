@@ -63,6 +63,63 @@ export const db = {
         }).then(msgs => msgs.reverse()); // Retorna na ordem cronológica (mais antigas primeiro)
     },
 
+    // ---- KANBAN / CRM ----
+    async getChatsList() {
+        const users = await prisma.user.findMany({
+            include: {
+                messages: {
+                    where: { groupId: null },
+                    orderBy: { createdAt: 'desc' },
+                    take: 1
+                }
+            }
+        });
+
+        const groups = await prisma.group.findMany({
+            include: {
+                messages: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1
+                }
+            }
+        });
+
+        const chats = [];
+        for (const u of users) {
+            if (u.messages.length > 0) {
+                chats.push({
+                    id: u.id,
+                    name: u.name || u.id.split('@')[0],
+                    isGroup: false,
+                    lastMessage: u.messages[0],
+                    updatedAt: u.messages[0].createdAt
+                });
+            }
+        }
+        for (const g of groups) {
+            if (g.messages.length > 0) {
+                chats.push({
+                    id: g.id,
+                    name: g.name || 'Grupo Desconhecido',
+                    isGroup: true,
+                    lastMessage: g.messages[0],
+                    updatedAt: g.messages[0].createdAt
+                });
+            }
+        }
+
+        // Ordena pelos mais recentes
+        chats.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        return chats;
+    },
+
+    async getChatMessagesAll(chatId: string, isGroup: boolean) {
+        return prisma.message.findMany({
+            where: isGroup ? { groupId: chatId } : { userId: chatId, groupId: null },
+            orderBy: { createdAt: 'asc' }
+        });
+    },
+
     // ---- ESTATÍSTICAS PARA O PAINEL ----
     async getStats() {
         const totalMessages = await prisma.message.count();
