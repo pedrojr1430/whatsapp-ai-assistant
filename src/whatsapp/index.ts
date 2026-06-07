@@ -133,8 +133,9 @@ export async function connectToWhatsApp() {
             }
         }
 
-        // Se não atendeu nenhum critério de ativação, ignora
-        if (!isCommand && !isReplyingToMe && !isMentioningMe) return;
+        // Se não atendeu nenhum critério de ativação E estiver em um grupo, ignora.
+        // Ou seja, se estiver no Privado (DM), ele sempre vai responder!
+        if (isGroup && !isCommand && !isReplyingToMe && !isMentioningMe) return;
 
         // Limpa o comando da mensagem para enviar para a IA
         let cleanText = textMessage;
