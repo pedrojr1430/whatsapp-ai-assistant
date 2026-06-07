@@ -95,7 +95,14 @@ export async function connectToWhatsApp() {
         
         // Verifica se a mensagem atual está respondendo a alguém
         const contextInfo = msg.message.extendedTextMessage?.contextInfo;
-        const isReplyingToMe = contextInfo?.participant === sock.user?.id.split(':')[0] + '@s.whatsapp.net';
+        const botId = sock.user?.id;
+        let isReplyingToMe = false;
+        
+        if (botId && contextInfo?.participant) {
+            const cleanBotId = botId.split(':')[0].split('@')[0] + '@s.whatsapp.net';
+            const cleanParticipant = contextInfo.participant.split(':')[0].split('@')[0] + '@s.whatsapp.net';
+            isReplyingToMe = cleanBotId === cleanParticipant;
+        }
 
         // Se não atendeu nenhum critério de ativação, ignora
         if (!isCommand && !isReplyingToMe) return;
