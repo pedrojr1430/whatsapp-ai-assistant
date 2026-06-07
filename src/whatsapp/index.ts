@@ -63,11 +63,23 @@ export async function connectToWhatsApp() {
         const msg = m.messages[0];
         if (!msg.message || msg.key.fromMe) return; // Ignora mensagens próprias ou sem texto
 
+        // Desempacota a mensagem se for temporária ou view once
+        let actualMessage = msg.message;
+        if (actualMessage?.ephemeralMessage) {
+            actualMessage = actualMessage.ephemeralMessage.message as typeof actualMessage;
+        } else if (actualMessage?.viewOnceMessage) {
+            actualMessage = actualMessage.viewOnceMessage.message as typeof actualMessage;
+        } else if (actualMessage?.viewOnceMessageV2) {
+            actualMessage = actualMessage.viewOnceMessageV2.message as typeof actualMessage;
+        } else if (actualMessage?.documentWithCaptionMessage) {
+            actualMessage = actualMessage.documentWithCaptionMessage.message as typeof actualMessage;
+        }
+
         // Extrai o texto da mensagem considerando os vários tipos do WhatsApp
-        const textMessage = msg.message.conversation || 
-                            msg.message.extendedTextMessage?.text || 
-                            msg.message.imageMessage?.caption || 
-                            msg.message.videoMessage?.caption || '';
+        const textMessage = actualMessage?.conversation || 
+                            actualMessage?.extendedTextMessage?.text || 
+                            actualMessage?.imageMessage?.caption || 
+                            actualMessage?.videoMessage?.caption || '';
 
         if (!textMessage) return;
 
@@ -87,16 +99,12 @@ export async function connectToWhatsApp() {
         }
 
         // --- VERIFICAÇÃO DE ATIVAÇÃO ---
-        // O bot só responde se:
-        // 1. Mensagem começa com /Petrus ou /shadow
-        // 2. A mensagem responde a uma mensagem enviada pelo bot (contextInfo.participant == meuNumero)
-        
         const isCommand = textMessage.toLowerCase().startsWith('/petrus') || textMessage.toLowerCase().startsWith('/shadow');
         
         // Verifica se a mensagem atual está respondendo a alguém (extrai de qualquer tipo de mensagem)
-        const contextInfo = msg.message.extendedTextMessage?.contextInfo || 
-                            msg.message.imageMessage?.contextInfo || 
-                            msg.message.videoMessage?.contextInfo;
+        const contextInfo = actualMessage?.extendedTextMessage?.contextInfo || 
+                            actualMessage?.imageMessage?.contextInfo || 
+                            actualMessage?.videoMessage?.contextInfo;
                             
         const botId = sock.user?.id;
         let isReplyingToMe = false;
