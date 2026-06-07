@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        String    @id // WhatsApp ID (ex: 551199999999@s.whatsapp.net)
+  name      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[]
+}
+
+model Group {
+  id        String    @id // WhatsApp Group ID
+  name      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[]
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  text      String
+  role      String   // "user" or "assistant"
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  groupId   String?
+  group     Group?   @relation(fields: [groupId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model SystemConfig {
+  key       String   @id // ex: "SYSTEM_PROMPT"
+  value     String
+  updatedAt DateTime @updatedAt
+}
