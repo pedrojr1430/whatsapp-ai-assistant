@@ -113,14 +113,23 @@ export async function connectToWhatsApp() {
         if (botId) {
             const pureBotNumber = botId.split(':')[0].split('@')[0];
             
-            // Verifica se está respondendo a uma mensagem enviada pelo bot
+            // 1. Verifica se está respondendo diretamente ao bot (participant tem o ID do bot)
             if (contextInfo?.participant) {
                 isReplyingToMe = contextInfo.participant.includes(pureBotNumber);
+            } 
+            // 1.1 Exceção: Em chat privado (DM), o WhatsApp às vezes omite o 'participant' num reply por ser óbvio.
+            else if (!isGroup && contextInfo?.quotedMessage) {
+                isReplyingToMe = true;
             }
             
-            // Verifica se o bot foi marcado com @ (menção)
+            // 2. Verifica se o bot foi marcado com @ (menção via UI do WhatsApp)
             if (contextInfo?.mentionedJid) {
                 isMentioningMe = contextInfo.mentionedJid.some((jid: string) => jid.includes(pureBotNumber));
+            }
+            
+            // 3. Fallback: Verifica se o número do bot foi digitado manualmente com @ no texto
+            if (textMessage.includes(`@${pureBotNumber}`)) {
+                isMentioningMe = true;
             }
         }
 
