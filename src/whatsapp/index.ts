@@ -93,19 +93,31 @@ export async function connectToWhatsApp() {
         
         const isCommand = textMessage.toLowerCase().startsWith('/petrus') || textMessage.toLowerCase().startsWith('/shadow');
         
-        // Verifica se a mensagem atual está respondendo a alguém
-        const contextInfo = msg.message.extendedTextMessage?.contextInfo;
+        // Verifica se a mensagem atual está respondendo a alguém (extrai de qualquer tipo de mensagem)
+        const contextInfo = msg.message.extendedTextMessage?.contextInfo || 
+                            msg.message.imageMessage?.contextInfo || 
+                            msg.message.videoMessage?.contextInfo;
+                            
         const botId = sock.user?.id;
         let isReplyingToMe = false;
+        let isMentioningMe = false;
         
-        if (botId && contextInfo?.participant) {
-            const cleanBotId = botId.split(':')[0].split('@')[0] + '@s.whatsapp.net';
-            const cleanParticipant = contextInfo.participant.split(':')[0].split('@')[0] + '@s.whatsapp.net';
-            isReplyingToMe = cleanBotId === cleanParticipant;
+        if (botId) {
+            const pureBotNumber = botId.split(':')[0].split('@')[0];
+            
+            // Verifica se está respondendo a uma mensagem enviada pelo bot
+            if (contextInfo?.participant) {
+                isReplyingToMe = contextInfo.participant.includes(pureBotNumber);
+            }
+            
+            // Verifica se o bot foi marcado com @ (menção)
+            if (contextInfo?.mentionedJid) {
+                isMentioningMe = contextInfo.mentionedJid.some((jid: string) => jid.includes(pureBotNumber));
+            }
         }
 
         // Se não atendeu nenhum critério de ativação, ignora
-        if (!isCommand && !isReplyingToMe) return;
+        if (!isCommand && !isReplyingToMe && !isMentioningMe) return;
 
         // Limpa o comando da mensagem para enviar para a IA
         let cleanText = textMessage;
